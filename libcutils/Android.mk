@@ -79,7 +79,7 @@ LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(hostSmpFlag)
 ifneq ($(HOST_OS),windows)
-LOCAL_CFLAGS += -Werror
+LOCAL_CFLAGS += -std=gnu89
 endif
 LOCAL_MULTILIB := both
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
@@ -92,7 +92,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := tst_str_parms
 LOCAL_CFLAGS += -DTEST_STR_PARMS
 ifneq ($(HOST_OS),windows)
-LOCAL_CFLAGS += -Werror
+LOCAL_CFLAGS += -std=gnu89
 endif
 LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
 LOCAL_STATIC_LIBRARIES := liblog
@@ -151,7 +151,7 @@ endif
 
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
 LOCAL_STATIC_LIBRARIES := liblog
-LOCAL_CFLAGS += $(targetSmpFlag) -Werror
+LOCAL_CFLAGS += $(targetSmpFlag) -std=gnu89
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
@@ -161,14 +161,14 @@ LOCAL_MODULE := libcutils
 # liblog symbols present in libcutils.
 LOCAL_WHOLE_STATIC_LIBRARIES := libcutils liblog
 LOCAL_SHARED_LIBRARIES := liblog
-LOCAL_CFLAGS += $(targetSmpFlag) -Werror
+LOCAL_CFLAGS += $(targetSmpFlag) -std=gnu89
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := tst_str_parms
-LOCAL_CFLAGS += -DTEST_STR_PARMS -Werror
+LOCAL_CFLAGS += -DTEST_STR_PARMS -std=gnu89
 LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_MODULE_TAGS := optional
