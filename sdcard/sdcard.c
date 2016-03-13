@@ -1220,8 +1220,8 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
 #else
     out.padding = 0;
 #endif
- 
-   fuse_reply(fuse, hdr->unique, &out, sizeof(out));
+
+    fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
 
@@ -1474,7 +1474,7 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
     out.flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
 
 #ifdef FUSE_SHORTCIRCUIT
-    out.flags |= FUSE_SHORTCIRCUIT;
+     out.flags |= FUSE_SHORTCIRCUIT;
 #endif
 #ifdef FUSE_STACKED_IO
     out.flags |= FUSE_STACKED_IO;
