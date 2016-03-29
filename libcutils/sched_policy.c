@@ -53,8 +53,12 @@ static inline SchedPolicy _policy(SchedPolicy p)
 #define TIMER_SLACK_FG 50000
 
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
+static pthread_once_t sched_once = PTHREAD_ONCE_INIT;
+static pthread_once_t cpuset_once = PTHREAD_ONCE_INIT;
 
 static int __sys_supports_schedgroups = -1;
+static int __sys_supports_cpusets = -1;
+static char proc_name[32] = {0};
 
 // File descriptors open to /dev/cpuctl/../tasks, setup by initialize, or -1 on error.
 static int bg_cgroup_fd = -1;
@@ -65,15 +69,8 @@ static int system_bg_cpuset_fd = -1;
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
 
-/* Add tid to the scheduling group defined by the policy */
-static int add_tid_to_cgroup(int tid, int fd)
+static int write_tid_to_fd(int tid, int fd)
 {
-    if (fd < 0) {
-        SLOGE("add_tid_to_cgroup failed; fd=%d\n", fd);
-        errno = EINVAL;
-        return -1;
-    }
-
     // specialized itoa -- works for tid > 0
     char text[22];
     char *end = text + sizeof(text) - 1;
@@ -91,8 +88,42 @@ static int add_tid_to_cgroup(int tid, int fd)
          */
         if (errno == ESRCH)
                 return 0;
-        SLOGW("add_tid_to_cgroup failed to write '%s' (%s); fd=%d\n",
-              ptr, strerror(errno), fd);
+        return -1;
+    }
+
+    return 0;
+}
+
+/* Add tid to the scheduling group defined by the policy */
+static int add_tid_to_cgroup(int tid, int fd)
+{
+    if (fd < 0) {
+        SLOGE("%s add_tid_to_cgroup failed; fd=%d\n", proc_name, fd);
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (write_tid_to_fd(tid, fd) != 0) {
+        SLOGW("%s add_tid_to_cgroup failed to write '%d' (%s); fd=%d\n",
+              proc_name, tid, strerror(errno), fd);
+        errno = EINVAL;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int add_tid_to_cpuset(int tid, int fd)
+{
+    if (fd < 0) {
+        SLOGE("%s add_tid_to_cpuset failed; fd=%d\n", proc_name, fd);
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (write_tid_to_fd(tid, fd) != 0) {
+        SLOGW("%s add_tid_to_cpuset failed to write '%d' (%s); fd=%d\n",
+              proc_name, tid, strerror(errno), fd);
         errno = EINVAL;
         return -1;
     }
@@ -101,34 +132,94 @@ static int add_tid_to_cgroup(int tid, int fd)
 }
 
 static void __initialize(void) {
+    int pfd;
+    int ptid = gettid();
+
+    sprintf(proc_name, "/proc/%d/cmdline", ptid);
+
+    pfd = open(proc_name, O_RDONLY);
+    if (pfd > 0) {
+        read(pfd, proc_name, sizeof(proc_name) - 1);
+        close(pfd);
+    }
+}
+
+static void __init_sched(void) {
     char* filename;
+
+    pthread_once(&the_once, __initialize);
+
     if (!access("/dev/cpuctl/tasks", F_OK)) {
         __sys_supports_schedgroups = 1;
 
         filename = "/dev/cpuctl/tasks";
         fg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (fg_cgroup_fd < 0) {
-            SLOGE("open of %s failed: %s\n", filename, strerror(errno));
+            SLOGE("%s open of %s failed: %s\n", proc_name, filename, strerror(errno));
+            __sys_supports_schedgroups = 0;
         }
 
         filename = "/dev/cpuctl/bg_non_interactive/tasks";
         bg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (bg_cgroup_fd < 0) {
-            SLOGE("open of %s failed: %s\n", filename, strerror(errno));
+            SLOGE("%s open of %s failed: %s\n", proc_name, filename, strerror(errno));
+            __sys_supports_schedgroups = 0;
+        }
+
+        if (!__sys_supports_schedgroups) {
+            close(bg_cgroup_fd);
+            bg_cgroup_fd = -1;
+
+            close(fg_cgroup_fd);
+            fg_cgroup_fd = -1;
         }
     } else {
         __sys_supports_schedgroups = 0;
     }
+}
+
+static void __init_cpuset(void) {
+    char *filename;
+
+    pthread_once(&the_once, __initialize);
 
 #ifdef USE_CPUSETS
     if (!access("/dev/cpuset/tasks", F_OK)) {
+        __sys_supports_cpusets = 1;
 
         filename = "/dev/cpuset/foreground/tasks";
         fg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        if (fg_cpuset_fd < 0) {
+            SLOGE("%s open of %s failed %s\n", proc_name, filename, strerror(errno));
+            __sys_supports_cpusets = 0;
+        }
+
         filename = "/dev/cpuset/background/tasks";
         bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        if (bg_cpuset_fd < 0) {
+            SLOGE("%s open of %s failed %s\n", proc_name, filename, strerror(errno));
+            __sys_supports_cpusets = 0;
+        }
+
         filename = "/dev/cpuset/system-background/tasks";
         system_bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
+        if (system_bg_cpuset_fd < 0) {
+            SLOGE("%s open of %s failed %s\n", proc_name, filename, strerror(errno));
+            __sys_supports_cpusets = 0;
+        }
+
+        if (!__sys_supports_cpusets) {
+            close(fg_cpuset_fd);
+            fg_cpuset_fd = -1;
+
+            close(bg_cpuset_fd);
+            bg_cpuset_fd = -1;
+
+            close(system_bg_cpuset_fd);
+            system_bg_cpuset_fd = -1;
+        }
+    } else {
+        __sys_supports_cpusets = 0;
     }
 #endif
 
@@ -193,11 +284,11 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
         return 0;
     }
 
-    SLOGE("Failed to find cpu subsys");
+    SLOGE("%s Failed to find cpu subsys", proc_name);
     fclose(fp);
     return -1;
  out_bad_data:
-    SLOGE("Bad cgroup data {%s}", lineBuf);
+    SLOGE("%s Bad cgroup data {%s}", proc_name, lineBuf);
     fclose(fp);
     return -1;
 #else
@@ -211,7 +302,8 @@ int get_sched_policy(int tid, SchedPolicy *policy)
     if (tid == 0) {
         tid = gettid();
     }
-    pthread_once(&the_once, __initialize);
+
+    pthread_once(&sched_once, __init_sched);
 
     if (__sys_supports_schedgroups) {
         char grpBuf[32];
@@ -250,8 +342,13 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
     if (tid == 0) {
         tid = gettid();
     }
+
+    pthread_once(&cpuset_once, __init_cpuset);
+
+    if (!__sys_supports_cpusets)
+        return set_sched_policy(tid, policy);
+
     policy = _policy(policy);
-    pthread_once(&the_once, __initialize);
 
     int fd;
     switch (policy) {
@@ -271,7 +368,7 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
         break;
     }
 
-    if (add_tid_to_cgroup(tid, fd) != 0) {
+    if (add_tid_to_cpuset(tid, fd) != 0) {
         if (errno != ESRCH && errno != ENOENT)
             return -errno;
     }
@@ -286,7 +383,8 @@ int set_sched_policy(int tid, SchedPolicy policy)
         tid = gettid();
     }
     policy = _policy(policy);
-    pthread_once(&the_once, __initialize);
+
+    pthread_once(&sched_once, __init_sched);
 
 #if POLICY_DEBUG
     char statfile[64];
