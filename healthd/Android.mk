@@ -10,7 +10,7 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := healthd_board_msm.cpp
-LOCAL_MODULE := libhealthd.msm
+LOCAL_MODULE := libhealthd.qcom
 LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
 
@@ -51,6 +51,10 @@ ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
 endif
 
+ifeq ($(strip $(BOARD_NO_CHARGER_LED)),true)
+LOCAL_CFLAGS += -DNO_CHARGER_LED
+endif
+
 LOCAL_C_INCLUDES := bootable/recovery
 
 LOCAL_STATIC_LIBRARIES := libbatteryservice libbinder libminui libpng libz libutils libstdc++ libcutils liblog libm libc
@@ -62,7 +66,7 @@ endif
 LOCAL_HAL_STATIC_LIBRARIES := libhealthd
 
 ifeq ($(BOARD_USES_QCOM_HARDWARE),true)
-BOARD_HAL_STATIC_LIBRARIES ?= libhealthd.msm
+BOARD_HAL_STATIC_LIBRARIES ?= libhealthd.qcom
 endif
 
 # Symlink /charger to /sbin/healthd
